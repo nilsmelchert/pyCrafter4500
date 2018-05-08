@@ -460,14 +460,16 @@ class Dlpc350(object):
         self.command('w', 0x00, 0x1a, 0x34, payload)
 
     def set_led_current(self, red_c, green_c, blue_c):
-        '''
-        Current control: 0x1a,0x01
-        current polarity: 0x1a,0x05
-        :param red_c:
-        :param green_c:
-        :param blue_c:
-        :return:
-        '''
+        """
+        Set led currents of LCR4500
+
+        Parameters
+        ----------
+        red_c :
+        green_c :
+        blue_c : 
+
+        """
         # self.command("w", 0x00, 0x1a, 0x05, bits_to_bytes(conv_len(False, 2)) )  #set reg polarity, so high numbers indicate high output
         red = conv_len(red_c, 8)
         green = conv_len(green_c, 8)
