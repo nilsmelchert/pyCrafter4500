@@ -459,6 +459,25 @@ class Dlpc350(object):
 
         self.command('w', 0x00, 0x1a, 0x34, payload)
 
+    def set_led_current(self, red_c, green_c, blue_c):
+        '''
+        Current control: 0x1a,0x01
+        current polarity: 0x1a,0x05
+        :param red_c:
+        :param green_c:
+        :param blue_c:
+        :return:
+        '''
+        # self.command("w", 0x00, 0x1a, 0x05, bits_to_bytes(conv_len(False, 2)) )  #set reg polarity, so high numbers indicate high output
+        red = conv_len(red_c, 8)
+        green = conv_len(green_c, 8)
+        blue = conv_len(blue_c, 8)
+        payload = red + green + blue
+        payload = bits_to_bytes(payload)
+        print("Setting rgb intensity to %i, %i, %i" % (red_c, green_c, blue_c))
+
+        self.command("w", 0x00, 0x0b, 0x01, payload)
+
 
 def pattern_mode(input_mode='pattern',
                  input_type='video',
