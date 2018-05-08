@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import time
+import sys
 from contextlib import contextmanager
 from math import floor
 
@@ -20,8 +21,8 @@ To connect to LCR4500, install libusb-win32 driver. Recommended way to do is thi
 with Zadig utility (http://zadig.akeo.ie/)
 """
 
-__author__  = 'Alexander Tomlinson'
-__email__   = 'mexander@gmail.com'
+__author__ = 'Alexander Tomlinson'
+__email__ = 'mexander@gmail.com'
 __version__ = '0.5'
 
 
@@ -91,7 +92,7 @@ def fps_to_period(fps):
     Calculates desired period (us) from given fps
     :param fps: frames per second
     """
-    period = int(floor(1.0 / fps * 10**6))
+    period = int(floor(1.0 / fps * 10 ** 6))
     return period
 
 
@@ -103,13 +104,13 @@ def connect_usb():
     """
     device = usb.core.find(idVendor=0x0451, idProduct=0x6401)
     device.reset()
-    for interface in range(0, 2):
-        if device.is_kernel_driver_active(interface):
-            device.detach_kernel_driver(interface)
+    if sys.platform == 'linux':
+        for interface in range(0, 2):
+            detach(device, interface)
 
     device.set_configuration()
 
-    lcr = dlpc350(device)
+    lcr = Dlpc350(device)
 
     yield lcr
 
@@ -118,12 +119,13 @@ def connect_usb():
     del device
 
 
-class dlpc350(object):
+class Dlpc350(object):
     """
     Class representing dmd controller.
     Can connect to different DLPCs by changing product ID. Check IDs in
     device manager.
     """
+
     def __init__(self, device):
         """
         connects device
@@ -131,6 +133,7 @@ class dlpc350(object):
         :param device: lcr4500 usb device
         """
         self.dlpc = device
+        self.ans = None
 
     def command(self,
                 mode,
@@ -466,7 +469,6 @@ def pattern_mode(input_mode='pattern',
                  led_color=0b111,  # BGR
                  **kwargs
                  ):
-
     if 'fps' in kwargs:
         period = fps_to_period(kwargs['fps'])
 
