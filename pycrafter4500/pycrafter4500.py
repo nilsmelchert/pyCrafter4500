@@ -25,6 +25,29 @@ __email__   = 'mexander@gmail.com'
 __version__ = '0.5'
 
 
+def detach(dev, interface=0):
+    """Detach the interface"""
+    if dev.is_kernel_driver_active(interface):
+        print("Detaching kernel driver for interface {interface}".format(interface=interface))
+        dev.detach_kernel_driver(interface)
+
+
+def attach(dev, interface=0):
+    if not dev.is_kernel_driver_active(interface):
+        print("Attaching kernel driver for interface {interface}".format(interface=interface))
+        dev.attach_kernel_driver(interface)
+
+
+def unclaim(dev, interface=0):
+    print("Unclaiming interface {interface}".format(interface=interface))
+    usb.util.release_interface(dev, interface)
+
+
+def claim(dev, interface=0):
+    """Claiming interface"""
+    usb.util.claim_interface(dev, interface)
+
+
 def conv_len(a, l):
     """
     Function that converts a number into a bit string of given length
@@ -79,6 +102,11 @@ def connect_usb():
     :yields: usb device
     """
     device = usb.core.find(idVendor=0x0451, idProduct=0x6401)
+    device.reset()
+    for interface in range(0, 2):
+        if device.is_kernel_driver_active(interface):
+            device.detach_kernel_driver(interface)
+
     device.set_configuration()
 
     lcr = dlpc350(device)
@@ -523,3 +551,8 @@ def power_up():
     """
     with connect_usb() as lcr:
         lcr.set_power_mode(do_standby=False)
+
+
+if __name__ == '__main__':
+    power_down()
+    # power_up()
