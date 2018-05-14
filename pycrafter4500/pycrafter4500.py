@@ -584,19 +584,6 @@ def set_sequence(input_mode='pattern',
         lcr.set_pattern_input_source(input_type)
 
         # 3: setup number of luts
-        num_pats = len(sequence)
-        lcr.set_pattern_config(num_lut_entries=num_pats,
-                               num_pats_for_trig_out2=1,
-                               do_repeat=repeat,
-                               num_images=len(sequence))
-
-        # 4: Pattern trigger mode selection
-        lcr.set_pattern_trigger_mode(trigger_type)
-
-        # 5: Set exposure and frame rate
-        lcr.set_exposure_frame_period(exposure, frame_period)
-
-        # 6: Skip setting up image indexes
         img_lut = list()
         buffer_swap_list = list()
         last_img_num = -1
@@ -606,6 +593,20 @@ def set_sequence(input_mode='pattern',
                 buffer_swap_list.append(True)
             else:
                 buffer_swap_list.append(False)
+            last_img_num = img_num
+        num_pats = len(sequence)
+        lcr.set_pattern_config(num_lut_entries=num_pats,
+                               num_pats_for_trig_out2=1,
+                               do_repeat=repeat,
+                               num_images=len(img_lut))
+
+        # 4: Pattern trigger mode selection
+        lcr.set_pattern_trigger_mode(trigger_type)
+
+        # 5: Set exposure and frame rate
+        lcr.set_exposure_frame_period(exposure, frame_period)
+
+        # 6: Skip setting up image indexes
         lcr.open_mailbox(1)
         # Set image indexes, that should be displayed
         lcr.command('w', 0x00, 0x1a, 0x34, img_lut)
