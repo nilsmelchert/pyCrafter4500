@@ -466,7 +466,7 @@ class Dlpc350(object):
         ----------
         red_c :
         green_c :
-        blue_c : 
+        blue_c :
 
         """
 
@@ -558,6 +558,93 @@ def pattern_mode(input_mode='pattern',
         # idk why you need a second start coming out of video mode
         lcr.pattern_display('start')
         lcr.pattern_display('stop')
+
+
+def set_sequence(input_mode='pattern',
+                 input_type='flash',
+                 sequence=((0, 1), (0, 2), (0, 3)),
+                 repeat=False,
+                 trigger_type='vsync',
+                 exposure=8333,
+                 frame_period=8333,
+                 bit_depth=8,
+                 led_color=0b111,  # BGR
+                 **kwargs
+                 ):
+    with connect_usb() as lcr:
+        assert bit_depth in [1, 2, 4, 7, 8]
+
+        # before proceeding to change params, need to stop pattern sequence mode
+        lcr.pattern_display('stop')
+
+        # 1: pattern display mode
+        lcr.set_display_mode(input_mode)
+
+        # 2: pattern display from external video
+        lcr.set_pattern_input_source(input_type)
+
+        # 3: setup number of luts
+        num_pats = len(sequence)
+        lcr.set_pattern_config(num_lut_entries=num_pats,
+                               num_pats_for_trig_out2=1,
+                               do_repeat=repeat,
+                               num_images=len(sequence))
+
+        # 4: Pattern trigger mode selection
+        lcr.set_pattern_trigger_mode(trigger_type)
+
+        # 5: Set exposure and frame rate
+        lcr.set_exposure_frame_period(exposure, frame_period)
+
+        # 6: Skip setting up image indexes
+        img_lut = list()
+        buffer_swap_list = list()
+        last_img_num = -1
+        for img_num, _ in sequence:
+            if img_num != last_img_num:
+                img_lut.append(img_num)
+                buffer_swap_list.append(True)
+            else:
+                buffer_swap_list.append(False)
+        lcr.open_mailbox(1)
+        # Set image indexes, that should be displayed
+        lcr.command('w', 0x00, 0x1a, 0x34, img_lut)
+        lcr.open_mailbox(0)
+
+        # 7: Set up LUT
+        lcr.open_mailbox(2)
+
+        bit_map = {1: [7, 15, 23],
+                   2: [3, 7, 11],
+                   4: [1, 3, 5],
+                   7: [0, 1, 2],
+                   8: [0, 1, 2]}
+
+        for _, pat_id in sequence:
+            if _ == 0:
+                trig_type = 1
+            else:
+                trig_type = 3
+
+            buffer_swap = buffer_swap_list[_]
+
+            lcr.mailbox_set_address(_)
+            lcr.send_pattern_lut(trig_type=trig_type,
+                                 pat_num=bit_map[bit_depth][i],
+                                 bit_depth=bit_depth,
+                                 led_select=led_color,
+                                 do_buf_swap=buffer_swap)
+
+        lcr.open_mailbox(0)
+
+        # 8/9: validate
+        lcr.start_pattern_lut_validate()
+
+        # 10: start sequence
+        lcr.pattern_display('start')
+        # idk why you need a second start coming out of video mode
+        lcr.pattern_display('start')
+
 
 
 def video_mode():
