@@ -210,7 +210,6 @@ class Dlpc350(object):
             self.ans = self.dlpc.read(0x81, 64)
         except USBError as e:
             print('USB Error:', e)
-
         time.sleep(0.02)
 
     def read_reply(self):
@@ -218,6 +217,7 @@ class Dlpc350(object):
         Reads in reply
         """
         for i in self.ans:
+            #print(int(i))
             print(hex(i))
 
     def set_power_mode(self, do_standby=False):
@@ -323,10 +323,10 @@ class Dlpc350(object):
         self.command('w', 0x00, 0x1a, 0x29, payload)
 
     def set_pattern_config(self,
-                           num_lut_entries=3,
+                           num_lut_entries=1,
                            do_repeat=True,
-                           num_pats_for_trig_out2=3,
-                           num_images=0):
+                           num_pats_for_trig_out2=1,
+                           num_images=3):
         """
         This API controls the execution of patterns stored in the lookup table. Before using this API, stop the current
         pattern sequence using DLPC350_PatternDisplay() API. After calling this API, send the Validation command using
@@ -437,7 +437,6 @@ class Dlpc350(object):
         # byte 0
         trig_type = conv_len(trig_type, 2)
         pat_num = conv_len(pat_num, 6)
-
         byte_0 = pat_num + trig_type
 
         # byte 1
@@ -470,26 +469,26 @@ class Dlpc350(object):
         blue_c : 
 
         """
-        # self.command("w", 0x00, 0x1a, 0x05, bits_to_bytes(conv_len(False, 2)) )  #set reg polarity, so high numbers indicate high output
+
         red = conv_len(red_c, 8)
         green = conv_len(green_c, 8)
         blue = conv_len(blue_c, 8)
         payload = red + green + blue
         payload = bits_to_bytes(payload)
         print("Setting rgb intensity to %i, %i, %i" % (red_c, green_c, blue_c))
-
         self.command("w", 0x00, 0x0b, 0x01, payload)
 
 
 def pattern_mode(input_mode='pattern',
-                 input_type='video',
+                 input_type='flash',
                  num_pats=3,
                  trigger_type='vsync',
-                 period=fps_to_period(222),
-                 bit_depth=7,
+                 period=fps_to_period(10),
+                 bit_depth=8,
                  led_color=0b111,  # BGR
                  **kwargs
                  ):
+
     if 'fps' in kwargs:
         period = fps_to_period(kwargs['fps'])
 
@@ -516,11 +515,16 @@ def pattern_mode(input_mode='pattern',
         lcr.set_exposure_frame_period(period, period)
 
         # 6: Skip setting up image indexes
-        pass
+        # Open Mailbox
+        lcr.command('w', 0x00, 0x1a, 0x33, [1])
+        # Set image indexes, that should be displayed
+        lcr.command('w', 0x00, 0x1a, 0x34, [0, 1, 2])
+        # Close Mailbox
+        lcr.command('w', 0x00, 0x1a, 0x33, [0])
+
 
         # 7: Set up LUT
         lcr.open_mailbox(2)
-
         bit_map = {1: [7, 15, 23],
                    2: [3, 7, 11],
                    4: [1, 3, 5],
@@ -528,26 +532,32 @@ def pattern_mode(input_mode='pattern',
                    8: [0, 1, 2]}
 
         for i in range(3):
-            if i == 0:
-                trig_type = 1
-            else:
-                trig_type = 3
+            #internal trigger type
+            trig_type = 0
 
             lcr.mailbox_set_address(i)
+            print(bit_map[bit_depth][i])
             lcr.send_pattern_lut(trig_type=trig_type,
                                  pat_num=bit_map[bit_depth][i],
                                  bit_depth=bit_depth,
                                  led_select=led_color)
+
+
 
         lcr.open_mailbox(0)
 
         # 8/9: validate
         lcr.start_pattern_lut_validate()
 
+        lcr.command('r', 0x00, 0x1a, 0x1a, [])
+
+
+
         # 10: start sequence
         lcr.pattern_display('start')
         # idk why you need a second start coming out of video mode
         lcr.pattern_display('start')
+        lcr.pattern_display('stop')
 
 
 def video_mode():
@@ -573,9 +583,22 @@ def power_up():
     Wakes LCR4500 up from standby mode.
     """
     with connect_usb() as lcr:
+
         lcr.set_power_mode(do_standby=False)
 
 
 if __name__ == '__main__':
-    power_down()
     # power_up()
+    # with connect_usb() as lcr:
+        # Set display to pattern mode
+        #  lcr.command('w', 0x00, 0x1a, 0x1b, [1])
+    #     #Set pattern display from flash memory
+    #
+    #     a = lcr.read_reply()
+    #
+
+    pattern_mode()
+    #power_down()
+        # lcr.set_led_current(100,100,100)
+
+
