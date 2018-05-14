@@ -596,7 +596,7 @@ def set_sequence(input_mode='pattern',
             last_img_num = img_num
         num_pats = len(sequence)
         lcr.set_pattern_config(num_lut_entries=num_pats,
-                               num_pats_for_trig_out2=1,
+                               num_pats_for_trig_out2=num_pats,
                                do_repeat=repeat,
                                num_images=len(img_lut))
 
@@ -621,17 +621,17 @@ def set_sequence(input_mode='pattern',
                    7: [0, 1, 2],
                    8: [0, 1, 2]}
 
-        for _, pat_id in sequence:
-            if _ == 0:
+        for qw, pat_id in enumerate(sequence):
+            if qw == 0:
                 trig_type = 1
             else:
                 trig_type = 3
 
-            buffer_swap = buffer_swap_list[_]
-
-            lcr.mailbox_set_address(_)
+            buffer_swap = buffer_swap_list[qw]
+            print(buffer_swap)
+            lcr.mailbox_set_address(qw)
             lcr.send_pattern_lut(trig_type=trig_type,
-                                 pat_num=bit_map[bit_depth][i],
+                                 pat_num=pat_id[1],
                                  bit_depth=bit_depth,
                                  led_select=led_color,
                                  do_buf_swap=buffer_swap)
@@ -684,8 +684,8 @@ if __name__ == '__main__':
     #
     #     a = lcr.read_reply()
     #
-
-    pattern_mode()
+    set_sequence()
+    # pattern_mode()
     #power_down()
         # lcr.set_led_current(100,100,100)
 
