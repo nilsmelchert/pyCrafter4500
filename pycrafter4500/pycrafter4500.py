@@ -334,7 +334,7 @@ class Dlpc350(object):
 
         self.command('w', 0x00, 0x1a, 0x29, payload)
 
-    def set_image_indexes(self, indexes):
+    def set_flash_image_indexes(self, indexes):
         """
         Opens the Mailbox to define the flash image indexes. Then inserts the indexes of the images that should be
         displayed from flash memory and closes the mailbox again.
@@ -354,7 +354,6 @@ class Dlpc350(object):
         # Open Mailbox to define flash image indexes
         self.open_mailbox(1)
         # Set image indexes, that should be displayed
-        self.command('w', 0x00, 0x1a, 0x34, indexes)
         self.send_img_lut(indexes)
         # Close Mailbox
         self.close_mailbox()
@@ -576,7 +575,7 @@ def pattern_mode(input_mode='pattern',
         lcr.set_exposure_frame_period(period, period)
 
         # 6: Skip setting up image indexes
-        lcr.set_image_indexes([0, 1, 2])
+        lcr.set_flash_image_indexes([0, 1, 2])
 
 
         # 7: Set up LUT
@@ -660,17 +659,14 @@ def set_flash_sequence(sequence=((0, 1), (0, 2), (0, 3)),
         lcr.set_exposure_frame_period(exposure, frame_period)
 
         # 6: Skip setting up image indexes
-        lcr.open_mailbox(1)
-        # Set image indexes, that should be displayed
-        lcr.command('w', 0x00, 0x1a, 0x34, img_lut)
-        lcr.close_mailbox()
+        lcr.set_flash_image_indexes(img_lut)
 
         # 7: Set up LUT
         lcr.open_mailbox(2)
 
         led_color = LED_LUT[color]
 
-        for element, (img_num, plane_id) in enumerate(sequence):
+        for element, (_, plane_id) in enumerate(sequence):
             # Always use internal trigger
             trig_type = 0
             lcr.mailbox_set_address(element)
