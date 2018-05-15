@@ -352,12 +352,12 @@ class Dlpc350(object):
             Indexes of the image in flash memory that should be displayed
         """
         # Open Mailbox to define flash image indexes
-        self.command('w', 0x00, 0x1a, 0x33, [1])
+        self.open_mailbox(1)
         # Set image indexes, that should be displayed
         self.command('w', 0x00, 0x1a, 0x34, indexes)
+        self.send_img_lut(indexes)
         # Close Mailbox
-        self.command('w', 0x00, 0x1a, 0x33, [0])
-
+        self.close_mailbox()
 
     def set_pattern_config(self,
                            num_lut_entries=1,
@@ -422,15 +422,18 @@ class Dlpc350(object):
 
     def send_img_lut(self, img_lut):
         """
+        Mailbox content to setup image LUT. See table 2-67 in programmer's guide for detailed description.
+        (USB: CMD2: 0x1A, CMD3: 0x34)
 
-        Parameters
-        ----------
-        img_lut
+        Mailbox has to be openend to define the flash image indexes.
 
-        Returns
-        -------
+        :param img_lut: List the image index numbers in the mailbox.
+                        For example: image indexes 0 through 3 are desired - write: 0x0 0x1 0x2 0x3
+                        Similarly, if the desired image index sequence is 0, 1, 2, 1 - write: 0x0 0x1 0x2 0x1
 
         """
+        for img_index in img_lut:
+            self.command('w', 0x00, 0x1a, 0x34, bits_to_bytes(conv_len(img_index, 8)))
 
     def send_pattern_lut(self,
                          trig_type,
