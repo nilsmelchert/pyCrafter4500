@@ -282,14 +282,15 @@ class Dlpc350(object):
 
         self.command('w', 0x00, 0x1a, 0x22, [mode])
 
-    def set_pattern_trigger_mode(self, mode='vsync'):
+    def set_pattern_trigger_mode(self, mode='IntExt'):
         """
         Selects the trigger type for pattern sequence.
         (USB: CMD2: 0x1A, CMD3: 0x23)
 
         :param mode: 0 = vsync
+                     1 = Internally or Externally (through TRIG_IN1 and TRIG_IN2) generated trigger.
         """
-        modes = ['vsync']
+        modes = ['vsync', 'IntExt']
         if mode in modes:
             mode = modes.index(mode)
 
@@ -542,7 +543,7 @@ class Dlpc350(object):
 def pattern_mode(input_mode='pattern',
                  input_type='flash',
                  num_pats=3,
-                 trigger_type='vsync',
+                 trigger_type='IntExt',
                  period=fps_to_period(10),
                  bit_depth=8,
                  led_color=0b111,  # BGR
