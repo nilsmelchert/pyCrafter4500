@@ -229,6 +229,9 @@ class Dlpc350(object):
             #print(int(i))
             print(hex(i))
 
+    def get_hardware_status(self):
+        pass
+
     def set_power_mode(self, do_standby=False):
         """
         The Power Control places the DLPC350 in a low-power state and powers down the DMD interface. Standby mode should
@@ -330,6 +333,31 @@ class Dlpc350(object):
         payload = bits_to_bytes(payload)
 
         self.command('w', 0x00, 0x1a, 0x29, payload)
+
+    def set_image_indexes(self, indexes):
+        """
+        Opens the Mailbox to define the flash image indexes. Then inserts the indexes of the images that should be
+        displayed from flash memory and closes the mailbox again.
+        For example, if image indexes 0 through 3 are desired, write 0x0 0x1 0x2 0x3 to the mailbox. Similary, if the
+        desired image index sequence is 0, 1, 2, 1 then write 0x0 0x1 0x2 0x1 to the mailbox.
+        Before executing this command, stop the current pattern sequence. After
+        executing this command, call DLPC350_ValidatePatLutData() API before starting the pattern sequence.
+        (USB: CMD2: 0x1A, CMD3: 0x33)
+        (USB: CMD2: 0x1A, CMD3: 0x34)
+        (USB: CMD2: 0x1A, CMD3: 0x33)
+
+        Parameters
+        ----------
+        indexes : list
+            Indexes of the image in flash memory that should be displayed
+        """
+        # Open Mailbox to define flash image indexes
+        self.command('w', 0x00, 0x1a, 0x33, [1])
+        # Set image indexes, that should be displayed
+        self.command('w', 0x00, 0x1a, 0x34, indexes)
+        # Close Mailbox
+        self.command('w', 0x00, 0x1a, 0x33, [0])
+
 
     def set_pattern_config(self,
                            num_lut_entries=1,
@@ -545,12 +573,7 @@ def pattern_mode(input_mode='pattern',
         lcr.set_exposure_frame_period(period, period)
 
         # 6: Skip setting up image indexes
-        # Open Mailbox
-        lcr.command('w', 0x00, 0x1a, 0x33, [1])
-        # Set image indexes, that should be displayed
-        lcr.command('w', 0x00, 0x1a, 0x34, [0, 1, 2])
-        # Close Mailbox
-        lcr.command('w', 0x00, 0x1a, 0x33, [0])
+        lcr.set_image_indexes([0, 1, 2])
 
 
         # 7: Set up LUT
