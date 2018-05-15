@@ -25,6 +25,15 @@ __author__ = 'Alexander Tomlinson'
 __email__ = 'mexander@gmail.com'
 __version__ = '0.5'
 
+LED_LUT = {'pass': 0b000, 'off': 0b000, 'black': 0b000,
+           'red': 0b001, 'r': 0b001,
+           'green': 0b010, 'g': 0b010,
+           'yellow': 0b011, 'y': 0b011,
+           'blue': 0b100, 'b': 0b100,
+           'magenta': 0b101, 'm': 0b101,
+           'cyan': 0b110, 'c': 0b110,
+           'white': 0b111, 'w': 0b111}
+
 
 def detach(dev, interface=0):
     """Detach the interface"""
@@ -374,6 +383,27 @@ class Dlpc350(object):
         mbox_num = bits_to_bytes(conv_len(mbox_num, 8))
         self.command('w', 0x00, 0x1a, 0x33, mbox_num)
 
+    def close_mailbox(self):
+        """
+        This API closes the Mailbox within the DLPC350 controller. This API must be called after sending data
+        to the mailbox/LUT using DLPC350_SendPatLut() or DLPC350_SendImageLut() APIs.
+        (USB: CMD2: 0x1A, CMD3: 0x33)
+
+        """
+        self.command('w', 0x00, 0x1a, 0x33, bits_to_bytes(conv_len(0, 8)))
+
+    def send_img_lut(self, img_lut):
+        """
+
+        Parameters
+        ----------
+        img_lut
+
+        Returns
+        -------
+
+        """
+
     def send_pattern_lut(self,
                          trig_type,
                          pat_num,
@@ -544,7 +574,7 @@ def pattern_mode(input_mode='pattern',
 
 
 
-        lcr.open_mailbox(0)
+        lcr.close_mailbox()
 
         # 8/9: validate
         lcr.start_pattern_lut_validate()
@@ -560,17 +590,14 @@ def pattern_mode(input_mode='pattern',
         lcr.pattern_display('stop')
 
 
-def set_sequence(input_mode='pattern',
-                 input_type='flash',
-                 sequence=((0, 1), (0, 2), (0, 3)),
-                 repeat=False,
-                 trigger_type='vsync',
-                 exposure=8333,
-                 frame_period=8333,
-                 bit_depth=8,
-                 led_color=0b111,  # BGR
-                 **kwargs
-                 ):
+def set_flash_sequence(sequence=((0, 1), (0, 2), (0, 3)),
+                       repeat=False,
+                       trigger_type='vsync',
+                       exposure=50000,
+                       frame_period=50000,
+                       bit_depth=8,
+                       color='white',
+                       ):
     with connect_usb() as lcr:
         assert bit_depth in [1, 2, 4, 7, 8]
 
@@ -578,10 +605,10 @@ def set_sequence(input_mode='pattern',
         lcr.pattern_display('stop')
 
         # 1: pattern display mode
-        lcr.set_display_mode(input_mode)
+        lcr.set_display_mode('pattern')
 
         # 2: pattern display from external video
-        lcr.set_pattern_input_source(input_type)
+        lcr.set_pattern_input_source('flash')
 
         # 3: setup number of luts
         img_lut = list()
@@ -610,33 +637,24 @@ def set_sequence(input_mode='pattern',
         lcr.open_mailbox(1)
         # Set image indexes, that should be displayed
         lcr.command('w', 0x00, 0x1a, 0x34, img_lut)
-        lcr.open_mailbox(0)
+        lcr.close_mailbox()
 
         # 7: Set up LUT
         lcr.open_mailbox(2)
 
-        bit_map = {1: [7, 15, 23],
-                   2: [3, 7, 11],
-                   4: [1, 3, 5],
-                   7: [0, 1, 2],
-                   8: [0, 1, 2]}
+        led_color = LED_LUT[color]
 
-        for qw, pat_id in enumerate(sequence):
-            if qw == 0:
-                trig_type = 1
-            else:
-                trig_type = 3
-
-            buffer_swap = buffer_swap_list[qw]
-            print(buffer_swap)
-            lcr.mailbox_set_address(qw)
+        for element, (img_num, plane_id) in enumerate(sequence):
+            # Always use internal trigger
+            trig_type = 0
+            lcr.mailbox_set_address(element)
             lcr.send_pattern_lut(trig_type=trig_type,
-                                 pat_num=pat_id[1],
+                                 pat_num=plane_id,
                                  bit_depth=bit_depth,
                                  led_select=led_color,
-                                 do_buf_swap=buffer_swap)
+                                 do_buf_swap=buffer_swap_list[element])
 
-        lcr.open_mailbox(0)
+        lcr.close_mailbox()
 
         # 8/9: validate
         lcr.start_pattern_lut_validate()
@@ -684,7 +702,7 @@ if __name__ == '__main__':
     #
     #     a = lcr.read_reply()
     #
-    set_sequence()
+    set_flash_sequence()
     # pattern_mode()
     #power_down()
         # lcr.set_led_current(100,100,100)
