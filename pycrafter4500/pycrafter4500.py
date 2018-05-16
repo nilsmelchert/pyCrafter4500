@@ -524,7 +524,7 @@ class Dlpc350(object):
                          bit_depth,
                          led_select,
                          do_invert_pat=False,
-                         do_insert_black=False,
+                         do_insert_black=True,
                          do_buf_swap=False,
                          do_trig_out_prev=False):
         """
@@ -723,11 +723,11 @@ def pattern_mode(input_mode='pattern',
         lcr.pattern_display('stop')
 
 
-def set_flash_sequence(sequence=((3, 1), (3, 2), (3, 0), (4, 0)),
+def set_flash_sequence(sequence=((4, 1), (4, 2), (4, 0), (5, 0), (5,1)),
                        repeat=False,
                        trigger_type='IntExt',
-                       exposure=500000,
-                       frame_period=500000,
+                       exposure=1000000,
+                       frame_period=1000000,
                        bit_depth=8,
                        color='white',
                        ):
