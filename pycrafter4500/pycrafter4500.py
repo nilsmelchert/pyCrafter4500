@@ -128,6 +128,15 @@ def connect_usb():
     del device
 
 
+class HidMessage(object):
+    def __init__(self):
+        self.flags = None
+        self.sequence = None
+        self.length_lsb = None
+        self.length_msb = None
+        self.data = None
+
+
 class Dlpc350(object):
     """
     Class representing dmd controller.
@@ -143,6 +152,8 @@ class Dlpc350(object):
         """
         self.dlpc = device
         self.ans = None
+
+        self.msg = HidMessage()
 
     def command(self,
                 mode,
@@ -217,6 +228,13 @@ class Dlpc350(object):
         # done writing, read feedback from dlpc
         try:
             self.ans = self.dlpc.read(0x81, 64)
+
+            # Put answer in message struct
+            self.msg.flags = self.ans[0]
+            self.msg.sequence = self.ans[1]
+            self.msg.length_lsb = self.ans[2]
+            self.msg.length_msb = self.ans[3]
+            self.msg.data = self.ans[4:-1]
         except USBError as e:
             print('USB Error:', e)
         time.sleep(0.02)
@@ -225,9 +243,14 @@ class Dlpc350(object):
         """
         Reads in reply
         """
-        for i in self.ans:
-            #print(int(i))
-            print(hex(i))
+        data_length = self.msg.length_msb*256 + self.msg.length_lsb
+
+        print('Flags:', bin(self.msg.flags))
+        print('Sequence Byte:', hex(self.msg.sequence))
+        print('Length of data:', int(data_length), 'Byte(s)')
+        print('Data:')
+        for i in self.msg.data:
+            print(bin(i))
 
     def get_hardware_status(self):
         pass
@@ -254,6 +277,30 @@ class Dlpc350(object):
         """
         self.command('w', 0x00, 0x1a, 0x1a, bits_to_bytes(conv_len(0x00, 8)))
 
+    def check_pat_lut_validate(self):
+        self.command('r', 0x00, 0x1a, 0x1a, bits_to_bytes(conv_len(0x00, 8)))
+        loop_count = 0
+        while 1:
+            self.command('r', 0x00, 0x1a, 0x1a, bits_to_bytes(conv_len(0x00, 8)))
+            validation = self.msg.data[0]
+            if not(validation & 0b10000000):
+                break
+            elif loop_count > 100:
+                raise TimeoutError("Max Iterations reached while validating pattern LUT!")
+            else:
+                loop_count += 1
+
+        if validation & 0b00000001:
+            print('Selected exposure or frame period settings are invalid')
+        if validation & 0b00000010:
+            print('Selected pattern numbers in LUT are invalid')
+        if validation & 0b00000100:
+            print('Warning, continuous Trigger Out1 request or overlapping black sectors')
+        if validation & 0b00001000:
+            print('Warning, post vector was not inserted prior to external triggered vector')
+        if validation & 0b00010000:
+            print('Warning, frame period or exposure difference is less than 230usec')
+
     def set_display_mode(self, mode='pattern'):
         """
         Selects the input mode for the projector.
@@ -267,6 +314,41 @@ class Dlpc350(object):
             mode = modes.index(mode)
 
         self.command('w', 0x00, 0x1a, 0x1b, [mode])
+
+    def set_input_source(self, source, port_width=0):
+        """
+        The Input Source Selection command selects the input source to be displayed by the DLPC350: 30-bit
+        Parallel Port, Internal Test Pattern, Flash memory, or FPD-link interface.
+        (USB: CMD2: 0x1A, CMD3: 0x00)
+
+        :param source: Select the input source and interface mode:
+                       0 = Parallel interface with 8-bit, 16-bit, 20-bit, 24-bit, or 30-bit RGB or YCrCb data formats
+                       1 = Internal test pattern; Use DLPC350_SetTPGSelect() API to select pattern
+                       2 = Flash. Images are 24-bit single-frame, still images stored in flash that are uploaded on command.
+                       3 = FPD-link interface
+        :param port_width: Parallel Interface bit depth
+                          0 = 30-bits
+                          1 = 24-bits
+                          2 = 20-bits
+                          3 = 16-bits
+                          4 = 10-bits
+                          5 = 8-bits
+
+        """
+        sources = ['parallel', 'test', 'flash', 'fdp']
+        if source in sources:
+            source = sources.index(source)
+
+        port_widths = [30, 24, 20, 16, 10, 8]
+        if port_width in port_widths:
+            port_width = port_widths.index(port_width)
+
+        source = conv_len(source, 3)
+        port_width = conv_len(port_width, 3)
+        payload = '00' + port_width + source
+        payload = bits_to_bytes(payload)
+
+        self.command('w', 0x00, 0x1a, 0x00, payload)
 
     def set_pattern_input_source(self, mode='video'):
         """
@@ -432,7 +514,8 @@ class Dlpc350(object):
                         Similarly, if the desired image index sequence is 0, 1, 2, 1 - write: 0x0 0x1 0x2 0x1
 
         """
-        for img_index in img_lut:
+        for elem_no, img_index in enumerate(img_lut):
+            self.mailbox_set_address(elem_no)
             self.command('w', 0x00, 0x1a, 0x34, bits_to_bytes(conv_len(img_index, 8)))
 
     def send_pattern_lut(self,
@@ -519,15 +602,41 @@ class Dlpc350(object):
 
         self.command('w', 0x00, 0x1a, 0x34, payload)
 
+    def set_led_pwm_polarity(self, invert=0):
+        """
+        WARNING: SEEMS TO BE THE INVERSE
+        The LED PWM Polarity command sets the polarity of all PWM signals. This command must be issued
+        before powering up the LED drivers.
+        (USB: CMD2: 0x1A, CMD3: 0x05)
+
+        :param invert: Polarity of PWM signals
+                       0 - Normal polarity. PWM 0 value corresponds to no current while
+                                            PWM 255 value corresponds to maximum current.
+                       1 - Inverted polarity. PWM 0 value corresponds to maximum current while
+                                              PWM 255 value corresponds to no current.
+
+        """
+        invert_modes = [False, True]
+        if invert in invert_modes:
+            invert = invert_modes.index(invert)
+
+        payload = conv_len(invert, 8)
+        payload = bits_to_bytes(payload)
+        self.command("w", 0x00, 0x1a, 0x05, payload)
+
     def set_led_current(self, red_c, green_c, blue_c):
         """
-        Set led currents of LCR4500
+        This parameter controls the pulse duration of the specific LED PWM modulation output pin. The resolution
+        is 8 bits and corresponds to a percentage of the LED current. The PWM value can be set from 0 to 100%
+        in 256 steps. If the LED PWM polarity is set to normal polarity, a setting of 0xFF gives the maximum PWM
+        current. The LED current is a function of the specific LED driver design.
+        (USB: CMD2: 0x0B, CMD3: 0x01)
 
-        Parameters
-        ----------
-        red_c :
-        green_c :
-        blue_c :
+        :param red_c:
+
+        :param green_c:
+
+        :param blue_c:
 
         """
 
@@ -607,8 +716,6 @@ def pattern_mode(input_mode='pattern',
 
         lcr.command('r', 0x00, 0x1a, 0x1a, [])
 
-
-
         # 10: start sequence
         lcr.pattern_display('start')
         # idk why you need a second start coming out of video mode
@@ -616,11 +723,11 @@ def pattern_mode(input_mode='pattern',
         lcr.pattern_display('stop')
 
 
-def set_flash_sequence(sequence=((0, 1), (0, 2), (0, 3)),
+def set_flash_sequence(sequence=((3, 1), (3, 2), (3, 0), (4, 0)),
                        repeat=False,
-                       trigger_type='vsync',
-                       exposure=50000,
-                       frame_period=50000,
+                       trigger_type='IntExt',
+                       exposure=500000,
+                       frame_period=500000,
                        bit_depth=8,
                        color='white',
                        ):
@@ -634,6 +741,7 @@ def set_flash_sequence(sequence=((0, 1), (0, 2), (0, 3)),
         lcr.set_display_mode('pattern')
 
         # 2: pattern display from external video
+        lcr.set_input_source('flash')
         lcr.set_pattern_input_source('flash')
 
         # 3: setup number of luts
@@ -647,9 +755,9 @@ def set_flash_sequence(sequence=((0, 1), (0, 2), (0, 3)),
             else:
                 buffer_swap_list.append(False)
             last_img_num = img_num
-        num_pats = len(sequence)
-        lcr.set_pattern_config(num_lut_entries=num_pats,
-                               num_pats_for_trig_out2=num_pats,
+
+        lcr.set_pattern_config(num_lut_entries=len(sequence),
+                               num_pats_for_trig_out2=len(sequence),
                                do_repeat=repeat,
                                num_images=len(img_lut))
 
@@ -681,6 +789,7 @@ def set_flash_sequence(sequence=((0, 1), (0, 2), (0, 3)),
 
         # 8/9: validate
         lcr.start_pattern_lut_validate()
+        lcr.check_pat_lut_validate()
 
         # 10: start sequence
         lcr.pattern_display('start')
@@ -719,15 +828,19 @@ def power_up():
 if __name__ == '__main__':
     # power_up()
     # with connect_usb() as lcr:
+    #     lcr.command('r', 0x00, 0x02, 0x05, [])
+    #     lcr.read_reply()
+    #     lcr.start_pattern_lut_validate()
+    #     lcr.set_display_mode('video')
+        # lcr.set_led_pwm_polarity()
         # Set display to pattern mode
         #  lcr.command('w', 0x00, 0x1a, 0x1b, [1])
-    #     #Set pattern display from flash memory
-    #
-    #     a = lcr.read_reply()
+        #Set pattern display from flash memory
+
     #
     set_flash_sequence()
     # pattern_mode()
-    #power_down()
+    # power_down()
         # lcr.set_led_current(100,100,100)
 
 
