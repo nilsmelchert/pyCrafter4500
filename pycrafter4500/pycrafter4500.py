@@ -723,11 +723,11 @@ def pattern_mode(input_mode='pattern',
         lcr.pattern_display('stop')
 
 
-def set_flash_sequence(sequence=((4, 1), (4, 2), (4, 0), (5, 0), (5,1)),
+def set_flash_sequence(sequence=((4, 1), (4, 2), (4, 0), (5, 0), (5,1), (3, 1)),
                        repeat=False,
                        trigger_type='IntExt',
-                       exposure=1000000,
-                       frame_period=1000000,
+                       exposure=8333,
+                       frame_period=50000,
                        bit_depth=8,
                        color='white',
                        ):
@@ -826,16 +826,6 @@ def power_up():
 
 
 if __name__ == '__main__':
-    # power_up()
-    # with connect_usb() as lcr:
-    #     lcr.command('r', 0x00, 0x02, 0x05, [])
-    #     lcr.read_reply()
-    #     lcr.start_pattern_lut_validate()
-    #     lcr.set_display_mode('video')
-        # lcr.set_led_pwm_polarity()
-        # Set display to pattern mode
-        #  lcr.command('w', 0x00, 0x1a, 0x1b, [1])
-        #Set pattern display from flash memory
 
     #
     set_flash_sequence()
