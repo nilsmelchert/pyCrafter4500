@@ -4,6 +4,7 @@ import time
 import sys
 from contextlib import contextmanager
 from math import floor
+import logging
 
 import usb.core
 import usb.util
@@ -25,6 +26,7 @@ __author__ = 'Alexander Tomlinson'
 __email__ = 'mexander@gmail.com'
 __version__ = '0.5'
 
+LOGGING_LEVEL = None
 LED_LUT = {'pass': 0b000, 'off': 0b000, 'black': 0b000,
            'red': 0b001, 'r': 0b001,
            'green': 0b010, 'g': 0b010,
@@ -129,12 +131,13 @@ def connect_usb():
 
 
 class HidMessage(object):
-    def __init__(self):
-        self.flags = None
-        self.sequence = None
-        self.length_lsb = None
-        self.length_msb = None
-        self.data = None
+    def __init__(self, msg):
+        # Put answer in message struct
+        self.flags = msg[0]
+        self.sequence = msg[1]
+        self.length_lsb = msg[2]
+        self.length_msb = msg[3]
+        self.data = msg[4:-1]
 
 
 class Dlpc350(object):
@@ -150,10 +153,15 @@ class Dlpc350(object):
 
         :param device: lcr4500 usb device
         """
-        self.dlpc = device
-        self.ans = None
+        self.logger = logging.getLogger(__name__)
+        if LOGGING_LEVEL is not None:
+            self.logger.setLevel(LOGGING_LEVEL)
+        self.loggerLevel = self.logger.getEffectiveLevel()
 
-        self.msg = HidMessage()
+        self.dlpc = device
+
+        self.ans = None
+        self.msg = None
 
     def command(self,
                 mode,
@@ -228,13 +236,7 @@ class Dlpc350(object):
         # done writing, read feedback from dlpc
         try:
             self.ans = self.dlpc.read(0x81, 64)
-
-            # Put answer in message struct
-            self.msg.flags = self.ans[0]
-            self.msg.sequence = self.ans[1]
-            self.msg.length_lsb = self.ans[2]
-            self.msg.length_msb = self.ans[3]
-            self.msg.data = self.ans[4:-1]
+            self.msg = HidMessage(self.ans)
         except USBError as e:
             print('USB Error:', e)
         time.sleep(0.02)
@@ -253,7 +255,63 @@ class Dlpc350(object):
             print(bin(i))
 
     def get_hardware_status(self):
-        pass
+        """
+        The Hardware Status command provides status information on the DLPC350's sequencer, DMD
+        controller, and initialization.
+        (USB: CMD2: 0x1A, CMD3: 0x0A)
+
+        """
+        self.command('r', 0x00, 0x1a, 0x0a, bits_to_bytes(conv_len(0x00, 8)))
+        status = self.msg.data[0]
+        if not status & 0b00000001:
+            self.logger.error('Internal Initialization Error.')
+        if status & 0b00000100:
+            self.logger.error('Multiple overlapping bias or reset operations are accessing the same DMD block.')
+        if status & 0b00001000:
+            self.logger.error('Forced Swap Error occurred.')
+        if status & 0b01000000:
+            self.logger.error('Sequencer has detected an error condition that caused an abort.')
+        if status & 0b10000000:
+            self.logger.error('Sequencer detected an error.')
+
+    def retrieve_firmware_version(self):
+        """
+        This command, supported in firmware version 2.0.0 and newer, reads the version information of the
+        DLPC350 firmware.
+        (USB: CMD2: 0x02, CMD3: 0x05)
+
+        :return: app_version, api_version, software_cfg_version, sequencer_cfg_version
+
+        """
+        self.command('r', 0x00, 0x02, 0x05, bits_to_bytes(conv_len(0x00, 8)))
+
+        # for detailed information seet table 2-4 in documentation
+        app_patch = self.msg.data[1]*256 + self.msg.data[0]
+        app_minor = self.msg.data[2]
+        app_major = self.msg.data[3]
+        app_version = '.'.join([app_major, app_minor, app_patch])
+
+        api_patch = self.msg.data[5] * 256 + self.msg.data[4]
+        api_minor = self.msg.data[6]
+        api_major = self.msg.data[7]
+        api_version = '.'.join([api_major, api_minor, api_patch])
+
+        software_cfg_patch = self.msg.data[9] * 256 + self.msg.data[8]
+        software_cfg_minor = self.msg.data[10]
+        software_cfg_major = self.msg.data[11]
+        software_cfg_version = '.'.join([software_cfg_major, software_cfg_minor, software_cfg_patch])
+
+        sequencer_cfg_patch = self.msg.data[13] * 256 + self.msg.data[12]
+        sequencer_cfg_minor = self.msg.data[14]
+        sequencer_cfg_major = self.msg.data[15]
+        sequencer_cfg_version = '.'.join([sequencer_cfg_major, sequencer_cfg_minor, sequencer_cfg_patch])
+
+        print('Application software revision:', app_version)
+        print('API software revision:', api_version)
+        print('Software configuration revision:', software_cfg_version)
+        print('Sequencer configuration revision:', sequencer_cfg_version)
+
+        return app_version, api_version, software_cfg_version, sequencer_cfg_version
 
     def set_power_mode(self, do_standby=False):
         """
@@ -723,7 +781,7 @@ def pattern_mode(input_mode='pattern',
         lcr.pattern_display('stop')
 
 
-def set_flash_sequence(sequence=((4, 1), (4, 2), (4, 0), (5, 0), (5,1), (3, 1)),
+def set_flash_sequence(sequence=((4, 1), (4, 2), (4, 0), (5, 0), (5, 1)),
                        repeat=False,
                        trigger_type='IntExt',
                        exposure=8333,
